@@ -12,6 +12,7 @@ import subprocess
 import glob
 import base64
 import re
+import shutil
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -19,6 +20,13 @@ from datetime import datetime
 CACHE_DIR = os.path.expanduser("~/Library/Caches/BillionTokens")
 CACHE_FILE = os.path.join(CACHE_DIR, "cache.json")
 CACHE_TTL = 45  # seconds
+
+# Apps opened from Finder or at login get a minimal PATH, so add the usual
+# places the codex and claude CLIs are installed.
+_EXTRA_PATHS = ["~/.local/bin", "/opt/homebrew/bin", "/usr/local/bin",
+                "~/.npm-global/bin", "~/.bun/bin", "~/.claude/local"]
+os.environ["PATH"] = os.pathsep.join(
+    [os.environ.get("PATH", "/usr/bin:/bin")] + [os.path.expanduser(p) for p in _EXTRA_PATHS])
 
 CONFIG_FILE = os.path.expanduser("~/Library/Application Support/BillionTokens/config.json")
 DEFAULT_PROVIDERS = {
@@ -51,6 +59,8 @@ def load_providers():
 
 def get_codex_limits():
     """Query Codex real-time rate limits via app-server JSON-RPC."""
+    if not shutil.which("codex"):
+        return {"status": "not_installed"}
     try:
         proc = subprocess.Popen(
             ["codex", "app-server", "--listen", "stdio://"],
@@ -148,6 +158,8 @@ def get_codex_limits():
 
 def get_claude_limits():
     """Fetch Claude limits via `claude -p /cost` and account metadata."""
+    if not shutil.which("claude"):
+        return {"status": "not_installed"}
     info = {
         "status": "offline",
         "plan": "",
@@ -290,6 +302,10 @@ def get_antigravity_limits():
                     info["token_expiry"] = expiry
             except Exception:
                 pass
+
+        if not token and not os.path.isdir(os.path.expanduser("~/.gemini/antigravity-cli")):
+            info["status"] = "not_installed"
+            return info
 
         # Query cloudcode-pa quota API with token
         if token:

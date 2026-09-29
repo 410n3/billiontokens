@@ -30,7 +30,7 @@ Data refreshes every 3 minutes, or when you press Refresh.
   - Claude: the `claude` CLI (Claude Code) on your `PATH`.
   - Antigravity: the Antigravity app, signed in.
 
-A provider whose CLI is missing shows as offline. The others keep working.
+You only need one of them. A provider that isn't installed shows "Not installed" in the panel and is left out of the menu bar and notch display. Install it later and it appears on the next refresh.
 
 ## Install
 

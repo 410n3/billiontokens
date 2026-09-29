@@ -281,6 +281,14 @@ class NotchPillView: NSView {
     var onRightClick: ((NSPoint) -> Void)?
 
     private var providerIndex = 0
+
+    // Indexes (0 Codex, 1 Claude, 2 Antigravity) that currently have data
+    var activeProviders: [Int] = [0, 1, 2] {
+        didSet {
+            if !activeProviders.contains(providerIndex) { providerIndex = activeProviders.first ?? 0 }
+            updateLabels()
+        }
+    }
     private var providerIcon: NSImageView!
     private var progressRing: CircularProgressView!
 
@@ -383,7 +391,14 @@ class NotchPillView: NSView {
     }
 
     func updateToolTip() {
-        toolTip = "✦ AI Limits:\n• Codex: \(codexPercent)% (\(codexReset.isEmpty ? "Active" : codexReset))\n• Claude: \(claudePercent)% (\(claudeReset.isEmpty ? "Active" : claudeReset))\n• Antigravity: \(antigravityPercent)% (\(antigravityReset.isEmpty ? "Active" : antigravityReset))\n\nClick: Next provider\nDouble-click: Open HUD (Fn + Control)"
+        let lines = [
+            (0, "Codex", codexPercent, codexReset),
+            (1, "Claude", claudePercent, claudeReset),
+            (2, "Antigravity", antigravityPercent, antigravityReset)
+        ].filter { activeProviders.contains($0.0) }
+         .map { "• \($0.1): \($0.2)% (\($0.3.isEmpty ? "Active" : $0.3))" }
+        let body = lines.isEmpty ? "No providers connected" : lines.joined(separator: "\n")
+        toolTip = "AI Limits:\n\(body)\n\nClick: Next provider\nDouble-click: Open HUD (Fn + Control)"
     }
 
     override func updateTrackingAreas() {
@@ -427,7 +442,9 @@ class NotchPillView: NSView {
             progressRing.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self else { return }
-            self.providerIndex = (self.providerIndex + 1) % 3
+            let list = self.activeProviders.isEmpty ? [0, 1, 2] : self.activeProviders
+            let pos = list.firstIndex(of: self.providerIndex) ?? -1
+            self.providerIndex = list[(pos + 1) % list.count]
             self.updateLabels()
             self.providerIcon.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.82, y: 0.82))
             self.progressRing.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.82, y: 0.82))
@@ -542,32 +559,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func updateMenuBarTitle() {
         guard let button = statusItem.button else { return }
         if showMenuBarTicker, let data = latestData {
-            let c = data.codex?.primary?.used_percent ?? 0
-            let cl = data.claude?.primary?.used_percent ?? 0
-            let ag = data.antigravity?.primary?.used_percent ?? 0
-
+            let entries: [(Int, NSImage, Int)] = [
+                (0, IconManager.shared.codexIcon, data.codex?.primary?.used_percent ?? 0),
+                (1, IconManager.shared.claudeIcon, data.claude?.primary?.used_percent ?? 0),
+                (2, IconManager.shared.antigravityIcon, data.antigravity?.primary?.used_percent ?? 0)
+            ]
+            let active = activeProviderIndexes(data)
             let attrStr = NSMutableAttributedString()
-
-            // 1. Codex
-            attrStr.append(makeIconAttachment(image: IconManager.shared.codexIcon, size: 13))
-            attrStr.append(NSAttributedString(string: " \(c)%   ", attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                .foregroundColor: NSColor.white
-            ]))
-
-            // 2. Claude
-            attrStr.append(makeIconAttachment(image: IconManager.shared.claudeIcon, size: 13))
-            attrStr.append(NSAttributedString(string: " \(cl)%   ", attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                .foregroundColor: NSColor.white
-            ]))
-
-            // 3. Antigravity
-            attrStr.append(makeIconAttachment(image: IconManager.shared.antigravityIcon, size: 13))
-            attrStr.append(NSAttributedString(string: " \(ag)%", attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                .foregroundColor: NSColor.white
-            ]))
+            for (i, entry) in entries.filter({ active.contains($0.0) }).enumerated() {
+                if i > 0 { attrStr.append(NSAttributedString(string: "   ")) }
+                attrStr.append(makeIconAttachment(image: entry.1, size: 13))
+                attrStr.append(NSAttributedString(string: " \(entry.2)%", attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    .foregroundColor: NSColor.white
+                ]))
+            }
+            if active.isEmpty {
+                attrStr.append(NSAttributedString(string: "Limits", attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+                    .foregroundColor: NSColor.white
+                ]))
+            }
 
             button.attributedTitle = attrStr
             button.title = ""
@@ -1135,6 +1147,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    func activeProviderIndexes(_ data: LimitPayload) -> [Int] {
+        [data.codex?.status, data.claude?.status, data.antigravity?.status]
+            .enumerated()
+            .filter { $0.element == "connected" }
+            .map { $0.offset }
+    }
+
+    // Replaces a section's numbers with a short explanation when there is no data.
+    // Returns false when the provider is connected and should render normally.
+    func showStatusMessage(_ status: String?, installHint: String, badge: NSTextField,
+                           primary: NSTextField, primaryBar: ProgressBarView,
+                           secondary: NSTextField, secondaryBar: ProgressBarView,
+                           meta: NSTextField) -> Bool {
+        let messages: [String: (String, String)] = [
+            "not_installed": ("Not installed", installHint),
+            "disabled": ("Disabled", "Turn on in config.json"),
+            "token_expired": ("Token expired", "Open the app to refresh"),
+            "error": ("Unavailable", "Check the CLI is signed in"),
+            "offline": ("Unavailable", "Check the CLI is signed in")
+        ]
+        guard let status = status, let msg = messages[status] else { return false }
+        badge.stringValue = "—"
+        primary.stringValue = msg.0
+        secondary.stringValue = msg.1
+        primaryBar.percentage = 0
+        secondaryBar.percentage = 0
+        meta.stringValue = ""
+        return true
+    }
+
     func updateUI(with data: LimitPayload) {
         timeLabel.stringValue = "Updated: \(data.time_str ?? "Now")"
 
@@ -1145,7 +1187,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let agPct = data.antigravity?.primary?.used_percent ?? 0
         let agReset = data.antigravity?.primary?.reset_str ?? ""
 
-        // Update Notch Island
+        // Update Notch Island (only providers that returned data)
+        notchView?.activeProviders = activeProviderIndexes(data)
         notchView?.codexPercent = cPct
         notchView?.codexReset = cReset
         notchView?.claudePercent = clPct
@@ -1157,7 +1200,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateMenuBarTitle()
 
         // 1. Update Codex
-        if let codex = data.codex {
+        if let codex = data.codex, !showStatusMessage(codex.status, installHint: "Install the codex CLI",
+                badge: codexPlanBadge, primary: codexPrimaryLabel, primaryBar: codexPrimaryBar,
+                secondary: codexSecondaryLabel, secondaryBar: codexSecondaryBar, meta: codexMetaLabel) {
             codexPlanBadge.stringValue = codex.plan ?? "Plus"
             if let pri = codex.primary {
                 let pct = Double(pri.used_percent ?? 0)
@@ -1174,7 +1219,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // 2. Update Claude
-        if let claude = data.claude {
+        if let claude = data.claude, !showStatusMessage(claude.status, installHint: "Install Claude Code",
+                badge: claudePlanBadge, primary: claudePrimaryLabel, primaryBar: claudePrimaryBar,
+                secondary: claudeSecondaryLabel, secondaryBar: claudeSecondaryBar, meta: claudeMetaLabel) {
             claudePlanBadge.stringValue = claude.plan ?? "Claude Pro"
             if let pri = claude.primary {
                 let pct = Double(pri.used_percent ?? 0)
@@ -1190,7 +1237,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // 3. Update Antigravity
-        if let agy = data.antigravity {
+        if let agy = data.antigravity, !showStatusMessage(agy.status, installHint: "Install Antigravity",
+                badge: antigravityBadge, primary: antigravityPrimaryLabel, primaryBar: antigravityPrimaryBar,
+                secondary: antigravitySecondaryLabel, secondaryBar: antigravitySecondaryBar, meta: antigravityMetaLabel) {
             antigravityBadge.stringValue = agy.plan ?? "Consumer"
             if let pri = agy.primary {
                 let pct = Double(pri.used_percent ?? 0)
@@ -1201,13 +1250,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let pct = Double(sec.used_percent ?? 0)
                 antigravitySecondaryBar.percentage = pct
                 antigravitySecondaryLabel.stringValue = "\(Int(pct))% (\(sec.reset_str ?? ""))"
-            }
-            if agy.status == "token_expired" {
-                antigravityPrimaryLabel.stringValue = "Token expired"
-                antigravitySecondaryLabel.stringValue = "Open Antigravity to refresh"
-            } else if agy.status == "disabled" {
-                antigravityPrimaryLabel.stringValue = "Disabled"
-                antigravitySecondaryLabel.stringValue = "Enable in config.json"
             }
             var meta = ["Account: \((agy.email ?? "").isEmpty ? "--" : agy.email!)"]
             if let model = agy.active_model, !model.isEmpty { meta.append("Model: \(model)") }
