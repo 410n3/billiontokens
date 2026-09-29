@@ -314,21 +314,9 @@ class NotchPillView: NSView {
             path.appendArc(from: NSPoint(x: 0, y: 0), to: NSPoint(x: 0, y: r), radius: r)
             path.close()
 
+            // Pure black with no rim so it blends into the hardware notch
             NSColor.black.setFill()
             path.fill()
-
-            // Subtle rim along left, bottom, right only (no border on top edge)
-            let strokePath = NSBezierPath()
-            strokePath.move(to: NSPoint(x: 0.5, y: h))
-            strokePath.line(to: NSPoint(x: 0.5, y: r))
-            strokePath.appendArc(from: NSPoint(x: 0.5, y: 0.5), to: NSPoint(x: r, y: 0.5), radius: r)
-            strokePath.line(to: NSPoint(x: w - r, y: 0.5))
-            strokePath.appendArc(from: NSPoint(x: w - 0.5, y: 0.5), to: NSPoint(x: w - 0.5, y: r), radius: r)
-            strokePath.line(to: NSPoint(x: w - 0.5, y: h))
-
-            strokePath.lineWidth = 1.0
-            NSColor(white: 1.0, alpha: isHovered ? 0.18 : 0.10).setStroke()
-            strokePath.stroke()
         } else {
             // Fully rounded capsule (floating / menu bar)
             let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 12, yRadius: 12)
@@ -656,7 +644,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         notchPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         notchPanel.isOpaque = false
         notchPanel.backgroundColor = .clear
-        notchPanel.hasShadow = true
+        notchPanel.hasShadow = false // A shadow leaves a grey halo around the notch
         notchPanel.isMovable = false // Pinned to the notch; not draggable
         notchPanel.delegate = self
         notchPanel.acceptsMouseMovedEvents = true
