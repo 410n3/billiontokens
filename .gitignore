@@ -1,0 +1,18 @@
+# Build output
+/BillionTokens
+/BillionTokens.app/
+/AILimitsHUD
+/AILimitsHUD.app/
+
+# Python
+__pycache__/
+*.pyc
+
+# Agent instruction files (kept local, not published)
+AGENTS.md
+CLAUDE.md
+.claude/
+.codex/
+
+# macOS
+.DS_Store
