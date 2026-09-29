@@ -260,6 +260,15 @@ def get_claude_limits():
     return info
 
 
+def format_reset_time(iso):
+    """Turn an ISO-8601 UTC timestamp into local time, e.g. 'at 2:15 PM'."""
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+        return "at " + dt.strftime("%-I:%M %p")
+    except Exception:
+        return iso
+
+
 def get_antigravity_limits():
     """Fetch Google Antigravity account status and real-time quota limits from cloudcode API."""
     info = {
@@ -333,19 +342,19 @@ def get_antigravity_limits():
                                 # Extract refresh time string from description
                                 r_str = ""
                                 if "refresh in " in desc:
-                                    r_str = desc.split("refresh in ")[-1].rstrip(".")
+                                    r_str = "in " + desc.split("refresh in ")[-1].rstrip(".")
                                 elif reset_time:
-                                    r_str = reset_time
+                                    r_str = format_reset_time(reset_time)
 
                                 if window == "5h":
                                     info["primary"] = {
                                         "used_percent": used_pct,
-                                        "reset_str": f"Resets in {r_str}" if r_str else "--"
+                                        "reset_str": f"Resets {r_str}" if r_str else "--"
                                     }
                                 elif window == "weekly":
                                     info["secondary"] = {
                                         "used_percent": used_pct,
-                                        "reset_str": f"Resets in {r_str}" if r_str else "--"
+                                        "reset_str": f"Resets {r_str}" if r_str else "--"
                                     }
             except urllib.error.HTTPError as api_err:
                 info["quota_api_error"] = str(api_err)
