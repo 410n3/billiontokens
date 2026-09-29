@@ -47,6 +47,19 @@ If `Fn + Control` does nothing, allow BillionTokens under System Settings > Priv
 
 To start it at login, add it under System Settings > General > Login Items.
 
+## Update
+
+From the folder you cloned:
+
+```bash
+cd billiontokens
+git pull
+./build.sh
+killall BillionTokens 2>/dev/null; open ~/Applications/BillionTokens.app
+```
+
+Your `config.json` settings are kept.
+
 ## Configuration
 
 Settings live in `~/Library/Application Support/BillionTokens/config.json`. Without that file, Codex and Claude are on and Antigravity is off.
