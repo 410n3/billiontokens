@@ -29,6 +29,16 @@ DEFAULT_PROVIDERS = {
 }
 
 
+def work_dir():
+    """Private working directory for CLI subprocesses.
+
+    Never run them from /tmp: any local user can plant project config there
+    (e.g. .claude/settings.json hooks) that the CLIs would load and execute.
+    """
+    os.makedirs(CACHE_DIR, mode=0o700, exist_ok=True)
+    return CACHE_DIR
+
+
 def load_providers():
     providers = dict(DEFAULT_PROVIDERS)
     try:
@@ -48,7 +58,7 @@ def get_codex_limits():
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
-            cwd="/tmp"
+            cwd=work_dir()
         )
 
         init_req = {
@@ -183,7 +193,7 @@ def get_claude_limits():
                 capture_output=True,
                 text=True,
                 timeout=15,
-                cwd="/tmp"
+                cwd=work_dir()
             )
             cost_out = cost_proc.stdout
 
@@ -264,7 +274,7 @@ def get_antigravity_limits():
             ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"],
             capture_output=True,
             text=True,
-            cwd="/tmp"
+            cwd=work_dir()
         )
         token = None
         if res.returncode == 0:
