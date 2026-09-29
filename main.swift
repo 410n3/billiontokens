@@ -1163,7 +1163,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let messages: [String: (String, String)] = [
             "not_installed": ("Not installed", installHint),
             "disabled": ("Disabled", "Turn on in config.json"),
-            "token_expired": ("Token expired", "Open the app to refresh"),
+            "token_expired": ("Token expired", "Run agy to refresh"),
             "error": ("Unavailable", "Check the CLI is signed in"),
             "offline": ("Unavailable", "Check the CLI is signed in")
         ]
@@ -1237,7 +1237,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // 3. Update Antigravity
-        if let agy = data.antigravity, !showStatusMessage(agy.status, installHint: "Install Antigravity",
+        if let agy = data.antigravity, !showStatusMessage(agy.status, installHint: "Install the agy CLI",
                 badge: antigravityBadge, primary: antigravityPrimaryLabel, primaryBar: antigravityPrimaryBar,
                 secondary: antigravitySecondaryLabel, secondaryBar: antigravitySecondaryBar, meta: antigravityMetaLabel) {
             antigravityBadge.stringValue = agy.plan ?? "Consumer"

@@ -303,7 +303,7 @@ def get_antigravity_limits():
             except Exception:
                 pass
 
-        if not token and not os.path.isdir(os.path.expanduser("~/.gemini/antigravity-cli")):
+        if not token and not shutil.which("agy") and not os.path.isdir(os.path.expanduser("~/.gemini/antigravity-cli")):
             info["status"] = "not_installed"
             return info
 

@@ -28,7 +28,7 @@ Data refreshes every 3 minutes, or when you press Refresh.
 - The CLIs for the providers you want to track, already signed in:
   - Codex: the `codex` CLI on your `PATH`.
   - Claude: the `claude` CLI (Claude Code) on your `PATH`.
-  - Antigravity: the Antigravity app, signed in.
+  - Antigravity: the Antigravity CLI (`agy`), signed in. Antigravity is off by default; see Configuration.
 
 You only need one of them. A provider that isn't installed shows "Not installed" in the panel and is left out of the menu bar and notch display. Install it later and it appears on the next refresh.
 
@@ -71,7 +71,7 @@ python3 collector.py --force
 
 - **Codex:** starts `codex app-server --listen stdio://` and calls `account/rateLimits/read` over JSON-RPC.
 - **Claude:** reads account details from `~/.claude.json` and parses the output of `claude -p --no-session-persistence /cost`. `/cost` runs locally and does not send a prompt to the model, so polling does not use your Claude quota. The most recent token counts come from session files in `~/.claude/projects/`.
-- **Antigravity:** reads the Antigravity sign-in token from the macOS Keychain and calls `cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary`. That endpoint is internal and undocumented. Google can change or block it at any time, which is why this provider is off by default. The token is used for that one request and is never written to disk or logs. When the token expires, the panel says "Token expired"; opening Antigravity refreshes it.
+- **Antigravity:** reads the sign-in token that the `agy` CLI stores from the macOS Keychain and calls `cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary`. That endpoint is internal and undocumented. Google can change or block it at any time, which is why this provider is off by default. The token is used for that one request and is never written to disk or logs. When the token expires, the panel says "Token expired"; running `agy` signs in again and refreshes it.
 
 ## Privacy
 
