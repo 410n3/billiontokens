@@ -5,12 +5,14 @@ Fetches real-time rate limits, gauges, and usage stats for Codex, Claude, and An
 """
 
 import sys
+import threading
 import os
 import json
 import time
 import subprocess
 import glob
 import base64
+import queue
 import re
 import shutil
 import urllib.error
@@ -77,43 +79,53 @@ def get_codex_limits():
             "method": "initialize",
             "params": {"clientInfo": {"name": "billiontokens", "version": "1.0"}, "capabilities": {}}
         }
-        proc.stdin.write(json.dumps(init_req) + "\n")
-        proc.stdin.flush()
+        # Read stdout on a thread so every wait has a real deadline. A bare
+        # readline() blocks forever if the app-server never answers.
+        lines = queue.Queue()
 
-        start_time = time.time()
-        while time.time() - start_time < 3:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            try:
-                msg = json.loads(line)
-                if msg.get("id") == 1:
-                    break
-            except Exception:
-                continue
+        def pump():
+            for line in proc.stdout:
+                lines.put(line)
+            lines.put(None)
 
-        rate_req = {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": None}
-        proc.stdin.write(json.dumps(rate_req) + "\n")
-        proc.stdin.flush()
+        threading.Thread(target=pump, daemon=True).start()
+
+        def wait_for(msg_id, deadline):
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return None
+                try:
+                    line = lines.get(timeout=remaining)
+                except queue.Empty:
+                    return None
+                if line is None:
+                    return None
+                try:
+                    msg = json.loads(line)
+                except Exception:
+                    continue
+                if msg.get("id") == msg_id:
+                    return msg
 
         rate_data = None
-        while time.time() - start_time < 5:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            try:
-                msg = json.loads(line)
-                if msg.get("id") == 2 and "result" in msg:
-                    rate_data = msg["result"]
-                    break
-            except Exception:
-                continue
-
-        proc.terminate()
         try:
-            proc.wait(timeout=1)
-        except Exception:
+            proc.stdin.write(json.dumps(init_req) + "\n")
+            proc.stdin.flush()
+            if wait_for(1, time.time() + 8) is not None:
+                rate_req = {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": None}
+                proc.stdin.write(json.dumps(rate_req) + "\n")
+                proc.stdin.flush()
+                reply = wait_for(2, time.time() + 8)
+                if reply and "result" in reply:
+                    rate_data = reply["result"]
+        finally:
+            # Never leave an app-server behind, whatever happened above.
             proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                pass
 
         if rate_data:
             rl = rate_data.get("rateLimits", {})
@@ -295,6 +307,7 @@ def get_antigravity_limits():
             ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"],
             capture_output=True,
             text=True,
+            timeout=10,
             cwd=work_dir()
         )
         token = None

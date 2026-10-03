@@ -1125,8 +1125,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             var payload: LimitPayload? = nil
             do {
                 try proc.run()
-                proc.waitUntilExit()
+                // Watchdog: a hung collector must never block refreshes forever.
+                DispatchQueue.global().asyncAfter(deadline: .now() + 45) {
+                    if proc.isRunning { proc.terminate() }
+                }
+                // Read before waiting so a full pipe cannot stall the collector.
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                proc.waitUntilExit()
                 if let decoded = try? JSONDecoder().decode(LimitPayload.self, from: data) {
                     payload = decoded
                 }
